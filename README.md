@@ -20,10 +20,10 @@ This project is part of my learning journey in deep learning with PyTorch, follo
 ## Dependencies
 
 Core Dependencies:
-- PyTorch 2.6.0 (CUDA 12.6) - from PyPI
-- torchvision 0.21.0 (CUDA 12.6) - from PyPI
-- torchaudio 2.6.0 (CUDA 12.6) - from PyPI
-- torchinfo 1.8.0 - from conda-forge
+- PyTorch 2.6.0 (CUDA 12.6)
+- torchvision 0.21.0
+- torchaudio 2.6.0
+- torchinfo 1.8.0
 - matplotlib 3.10.0
 - numpy 2.1.2
 
@@ -37,19 +37,9 @@ Core Dependencies:
    conda create -n pytorch_env python=3.12
    conda activate pytorch_env
 
-   # Install PyTorch with CUDA support from PyPI
-   # Note: Install torch first, then torchvision and torchaudio
-   pip install torch==2.6.0+cu126 --index-url https://download.pytorch.org/whl/cu126
-   pip install torchvision==0.21.0+cu126 torchaudio==2.6.0+cu126 --index-url https://download.pytorch.org/whl/cu126
-
-   # Install torchinfo from conda-forge
-   conda install -c conda-forge torchinfo
-
-   # Install additional dependencies
-   pip install matplotlib numpy
+   # Install all dependencies
+   pip install -r requirements.txt
    ```
-
-   Note: We use PyPI for PyTorch packages to ensure CUDA compatibility and conda-forge for torchinfo to avoid conflicts.
 
 ## Usage
 
@@ -61,32 +51,6 @@ Core Dependencies:
 2. Run the main script:
    ```bash
    python main.py
-   ```
-
-## Troubleshooting
-
-If you encounter the error:
-```
-ModuleNotFoundError: No module named 'torch.hub'
-```
-
-Try these solutions:
-
-1. Remove all PyTorch-related packages and reinstall in the correct order:
-   ```bash
-   conda remove torchinfo --force
-   pip uninstall torch torchvision torchaudio
-   
-   # Reinstall in correct order
-   pip install torch==2.6.0+cu126 --index-url https://download.pytorch.org/whl/cu126
-   pip install torchvision==0.21.0+cu126 torchaudio==2.6.0+cu126 --index-url https://download.pytorch.org/whl/cu126
-   conda install -c conda-forge torchinfo
-   ```
-
-2. If the error persists, try installing PyTorch without CUDA first, then upgrade:
-   ```bash
-   pip install torch torchvision torchaudio
-   pip install --upgrade torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
    ```
 
 ## Learning Resources
