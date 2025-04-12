@@ -1,3 +1,6 @@
+import os
+os.environ['KMP_DUPLICATE_LIB_OK']='TRUE'
+
 import torch
 import torchvision
 print(f"Torch ver:{torch.__version__}")
@@ -9,6 +12,7 @@ from torchvision import transforms
 from torchinfo import summary
 from going_modular import data_setup,engine
 from helper_functions import download_data
+import multiprocessing as mp
 
 #set up device for gpu
 device = 'cuda' if torch.cuda.is_available() else "cpu"
@@ -22,7 +26,7 @@ image_path = download_data(source="https://github.com/mrdbourke/pytorch-deep-lea
 train_dir = image_path / "train"
 test_dir = image_path / "test"
 batch_size = 32
-NumberOfWorker =2
+NumberOfWorker =1
 IMG_SIZE = 244 #from vit paper
 
 #resize data incoming
@@ -34,12 +38,35 @@ manual_transforms = transforms.Compose([
 print(f"Path Train:{train_dir}\nPath Test:{test_dir}")
 print(f"Print Out Manually Created Transforms:{manual_transforms}")
 
+
+#get data from helper modular
 train_dataloader,test_dataloader,classes_name = data_setup.create_dataloaders(
     train_dir=train_dir,
     test_dir=test_dir,
     transform=manual_transforms,
     batch_size=batch_size,
-    num_workers=NumberOfWorker
-)
+    pin_memory=False,
+    num_workers=0
+    )
 
-print(f"Training data size: {len(train_dataloader)}\nTesting data size: {len(test_dataloader)}\nclasses Name: {classes_name}")
+print(f"Training data size: {len(test_dataloader)}\nTesting data size: {len(test_dataloader)}\nclasses Name: {classes_name}")
+
+# Get a single batch using next() with iter()
+image_batch, label_batch = next(iter(train_dataloader))
+
+# Do something with the batch
+print(f"Image batch shape: {image_batch.shape}")
+print(f"Label batch shape: {label_batch.shape}")
+
+#getting image by index
+image,label = image_batch[0],label_batch[0]
+
+#Plot image with matplotlib swaping place channel,height,width
+plt.imshow(image.permute(1,2,0))
+plt.title(label)
+plt.axis(False)
+plt.show()
+
+# if __name__ == '__main__':
+#     mp.freeze_support()
+    # main()
