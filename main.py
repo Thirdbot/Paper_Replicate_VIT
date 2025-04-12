@@ -63,7 +63,7 @@ image,label = image_batch[0],label_batch[0]
 
 #Plot image with matplotlib swaping place channel,height,width
 plt.imshow(image.permute(1,2,0))
-plt.title(label)
+plt.title(classes_name[label])
 plt.axis(False)
 plt.show()
 
