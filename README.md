@@ -1,1 +1,1 @@
-# Paper_replicate_VIT
+# Paper_Replicate_VIT
