@@ -13,30 +13,43 @@ This project is part of my learning journey in deep learning with PyTorch, follo
 .
 ├── main.py              # Main project file
 ├── helper_functions.py  # Utility functions for PyTorch (from mrdbourke)
+├── requirements.txt     # Project dependencies
 └── README.md           # This file
 ```
 
 ## Dependencies
 
-- PyTorch
-- torchvision
-- matplotlib
-- numpy
+- PyTorch 2.6.0 (CUDA 12.6)
+- torchvision 0.21.0
+- torchaudio 2.6.0
+- matplotlib 3.10.0
+- numpy 2.1.2
 
 ## Setup
 
 1. Clone this repository
-2. Install the required dependencies:
+2. Create a conda environment from the requirements.txt file:
    ```bash
-   pip install torch torchvision matplotlib numpy
+   # Create a new conda environment using the requirements.txt file
+   conda create --name pytorch_env --file requirements.txt
+   
+   # Activate the environment
+   conda activate pytorch_env
    ```
+
+   Note: Make sure you're using the same platform (Windows 64-bit) as specified in the requirements.txt file.
 
 ## Usage
 
-Run the main script:
-```bash
-python main.py
-```
+1. Make sure your conda environment is activated:
+   ```bash
+   conda activate pytorch_env
+   ```
+
+2. Run the main script:
+   ```bash
+   python main.py
+   ```
 
 ## Learning Resources
 
