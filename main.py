@@ -101,9 +101,6 @@ conv2d = nn.Conv2d(in_channels=3,
 image_of_conv2d = conv2d(image.unsqueeze(0)) #add batch dimension batchsize,embedd_dim,P,P
 print(f"Image of conv2d shape:{image_of_conv2d.shape}")
 
-flatten_image_of_conv2d = torch.flatten(image_of_conv2d)
-print(f"Flatten image of conv2d shape:{flatten_image_of_conv2d.shape}")
-
 #visualize embbeded patches
 # r=2
 # c=20
@@ -125,3 +122,19 @@ print(f"Flatten image of conv2d shape:{flatten_image_of_conv2d.shape}")
 #             index_jel=random_indexs,
 #             classes_name=classes_name,
 #             label=label)
+
+flatten_image_of_conv2d = torch.flatten(image_of_conv2d,start_dim=2,end_dim=3)
+print(f"Flatten image of `conv2d` shape:{flatten_image_of_conv2d.shape}")
+flatten_image_of_conv2d_transpose = flatten_image_of_conv2d.permute(0,2,1)
+print(f"Flatten image of `conv2d` transpose shape:{flatten_image_of_conv2d_transpose.shape}")
+
+
+
+
+
+
+
+
+
+
+
