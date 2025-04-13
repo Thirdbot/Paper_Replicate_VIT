@@ -12,7 +12,12 @@ from torchinfo import summary
 from going_modular import data_setup,engine
 from helper_functions import download_data
 
-from helper_module.patching_visualizer import patcher_visual
+from helper_module.grid_visual import patcher_visual
+from helper_module.single_visual import single_image_visual
+from helper_module.grid_visual import grid_index_visual
+
+import matplotlib.pyplot as plt
+import random
 
 #set up device for gpu
 device = 'cuda' if torch.cuda.is_available() else "cpu"
@@ -61,13 +66,62 @@ print(f"Label batch shape: {label_batch.shape}")
 #getting image by index
 image,label = image_batch[0],label_batch[0]
 
+#visualization
+# single_image_visual(image,classes_name,label)
+
+
+
+
 
 #replicating VIT
 
+
+
+
 #crete patch number visualization
-image_dim = image_batch.shape
-patcher_visual(image=image,
-               img_size=IMG_SIZE,
-               patch_size=16,
-               classes_name=classes_name,
-               label=label)
+patch_size = 16
+
+# patcher_visual(image=image,
+#                img_size=IMG_SIZE,
+#                patch_size=patch_size,
+#                classes_name=classes_name,
+#                label=label)
+
+
+##create conv2d layer
+
+#since we already have split patch image to different patch so stride going to be patch size
+conv2d = nn.Conv2d(in_channels=3,
+                   out_channels=768,
+                   kernel_size=patch_size,
+                   stride=patch_size,
+                   padding=0)
+
+#image of conv2d from full image
+image_of_conv2d = conv2d(image.unsqueeze(0)) #add batch dimension batchsize,embedd_dim,P,P
+print(f"Image of conv2d shape:{image_of_conv2d.shape}")
+
+flatten_image_of_conv2d = torch.flatten(image_of_conv2d)
+print(f"Flatten image of conv2d shape:{flatten_image_of_conv2d.shape}")
+
+#visualize embbeded patches
+# r=2
+# c=20
+# random_indexs = random.sample(range(0,768),k=c)  # Changed from 758 to 768 to match out_channels
+# box_size = 12
+
+# print(f"Random indices: {random_indexs}")
+# print(f"Number of indices: {len(random_indexs)}")
+
+# fig,axs = plt.subplots(nrows=r,ncols=c,figsize=(box_size,box_size))
+
+
+# print(f"Image for visualization shape: {image_of_conv2d.shape}")
+
+# grid_index_visual(image=image_of_conv2d,
+#             fig=fig,
+#             axs=axs,
+#             index_iel=[0],
+#             index_jel=random_indexs,
+#             classes_name=classes_name,
+#             label=label)
