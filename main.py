@@ -67,7 +67,8 @@ print(f"Label batch shape: {label_batch.shape}")
 image,label = image_batch[0],label_batch[0]
 
 #visualization
-# single_image_visual(image,classes_name,label)
+
+# single_image_visual(image.permute(1,2,0),classes_name,label)
 
 
 
@@ -128,10 +129,10 @@ print(f"Flatten image of `conv2d` shape:{flatten_image_of_conv2d.shape}")
 flatten_image_of_conv2d_transpose = flatten_image_of_conv2d.permute(0,2,1)
 print(f"Flatten image of `conv2d` transpose shape:{flatten_image_of_conv2d_transpose.shape}")
 
-
-
-
-
+single_flatten_image = flatten_image_of_conv2d_transpose[:,:,0].detach().numpy()
+single_image_visual(image=single_flatten_image,
+                    classes=classes_name,
+                    label=label)
 
 
 
