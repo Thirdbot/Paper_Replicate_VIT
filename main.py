@@ -6,13 +6,13 @@ import torchvision
 print(f"Torch ver:{torch.__version__}")
 print(f"TorchVision ver:{torchvision.__version__}")
 
-import matplotlib.pyplot as plt
 from torch import nn
 from torchvision import transforms
 from torchinfo import summary
 from going_modular import data_setup,engine
 from helper_functions import download_data
-import multiprocessing as mp
+
+from helper_module.patching_visualizer import patcher_visual
 
 #set up device for gpu
 device = 'cuda' if torch.cuda.is_available() else "cpu"
@@ -61,12 +61,13 @@ print(f"Label batch shape: {label_batch.shape}")
 #getting image by index
 image,label = image_batch[0],label_batch[0]
 
-#Plot image with matplotlib swaping place channel,height,width
-plt.imshow(image.permute(1,2,0))
-plt.title(classes_name[label])
-plt.axis(False)
-plt.show()
 
-# if __name__ == '__main__':
-#     mp.freeze_support()
-    # main()
+#replicating VIT
+
+#crete patch number visualization
+image_dim = image_batch.shape
+patcher_visual(image=image,
+               img_size=IMG_SIZE,
+               patch_size=16,
+               classes_name=classes_name,
+               label=label)
