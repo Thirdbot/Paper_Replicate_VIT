@@ -250,7 +250,32 @@ class MultiHeadAttention(nn.Module):
                                                  value=x,
                                                  need_weights=False)
         return attn_output
-    
-multi_head_attention = MultiHeadAttention(embedding_dim=embendding_dim)
 
+multi_head_attention = MultiHeadAttention(embedding_dim=embendding_dim)
+#in genarally this is out put which batch from (batch_size,num_patches,embedding_dim)
+#that have the most attention 
 print(f"Multi head attention shape:{multi_head_attention(image_embedding(image_batch)).shape}")
+
+class MLPBlock(nn.Module):
+    def __init__(self,
+                 embedding_dim:int=768,
+                 mlp_size:int=3072,
+                 dropout:float=0.1):
+        super().__init__()
+        
+        self.layernorm = nn.LayerNorm(normalized_shape=embedding_dim)
+        self.mlp = nn.Sequential(
+            nn.Linear(in_features=embedding_dim,
+                      out_features=mlp_size),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(in_features=mlp_size,out_features=embedding_dim)
+        )
+    def forward(self,x):
+        x = self.layernorm(x)
+        x = self.mlp(x)
+        return x
+    
+mlp_block = MLPBlock(embedding_dim=embendding_dim)
+
+print(f"MLP block shape:{mlp_block(image_embedding(image_batch)).shape}")
