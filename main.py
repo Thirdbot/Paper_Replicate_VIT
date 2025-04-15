@@ -67,40 +67,19 @@ print(f"Label batch shape: {label_batch.shape}")
 image,label = image_batch[0],label_batch[0]
 
 #visualization
-
 # single_image_visual(image.permute(1,2,0),classes_name,label)
 
-
-
-
-
-#replicating VIT
-
-
-
+#replicating VIT------------------------------------------------------
 
 #crete patch number visualization
 patch_size = 16
+embendding_dim = 768
 
 # patcher_visual(image=image,
 #                img_size=IMG_SIZE,
 #                patch_size=patch_size,
 #                classes_name=classes_name,
 #                label=label)
-
-
-##create conv2d layer
-
-#since we already have split patch image to different patch so stride going to be patch size
-conv2d = nn.Conv2d(in_channels=3,
-                   out_channels=768,
-                   kernel_size=patch_size,
-                   stride=patch_size,
-                   padding=0)
-
-#image of conv2d from full image
-image_of_conv2d = conv2d(image.unsqueeze(0)) #add batch dimension batchsize,embedd_dim,P,P
-print(f"Image of conv2d shape:{image_of_conv2d.shape}")
 
 #visualize embbeded patches
 # r=2
@@ -123,17 +102,6 @@ print(f"Image of conv2d shape:{image_of_conv2d.shape}")
 #             index_jel=random_indexs,
 #             classes_name=classes_name,
 #             label=label)
-
-flatten_image_of_conv2d = torch.flatten(image_of_conv2d,start_dim=2,end_dim=3)
-print(f"Flatten image of `conv2d` shape:{flatten_image_of_conv2d.shape}")
-flatten_image_of_conv2d_transpose = flatten_image_of_conv2d.permute(0,2,1)
-print(f"Flatten image of `conv2d` transpose shape:{flatten_image_of_conv2d_transpose.shape}")
-
-single_flatten_image = flatten_image_of_conv2d_transpose[:,:,0].detach().numpy()
-single_image_visual(image=single_flatten_image,
-                    classes=classes_name,
-                    label=label)
-
 
 #CREATE PATCH EMBEDDING LAYERS
 class PatchEmbedding(nn.Module):
@@ -166,11 +134,28 @@ patchify = PatchEmbedding(in_channels=3,
 
 print(f"Patchify shape:{patchify(image.unsqueeze(0)).shape}")
 
+#CREATE CLASS TOKEN EMBEDDING LAYERS
+ 
+patch_embedding = patchify(image.unsqueeze(0))
 
+class ClassTokenEmbedding(nn.Module):
+    def __init__(self,
+                 batch_size:int,
+                 embedding_dim:int
+                 ):
+        
+        super().__init__()
+        
+        self.class_token = nn.Parameter(torch.randn(batch_size,1,embedding_dim))
+        self.image_embedded_class = torch.cat((self.class_token,patch_embedding),dim=1)
+    
+    def forward(self):
+        return self.image_embedded_class
+    
+class_tokenning = ClassTokenEmbedding(batch_size=patch_embedding.shape[0],
+                                      embedding_dim=patch_embedding.shape[-1])
 
-
-
-
+print(f"Class tokenning shape:{class_tokenning().shape}")
 
 
 
