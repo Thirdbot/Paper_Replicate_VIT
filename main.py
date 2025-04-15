@@ -120,8 +120,11 @@ class PatchEmbedding(nn.Module):
                                  padding=0)
         #current shape after flattening is collasping of last 2 dims
         self.flatten = nn.Flatten(start_dim=2,end_dim=3)
+        # Move to device
+        self.to(device)
         
     def forward(self,x):
+        x = x.to(device)
         x_patched= self.patcher(x) #batchsize,channel,height,width
         x_flattened = self.flatten(x_patched) #batchsize,embedding_dim,num_patches
         x_flattened_transpose = x_flattened.permute(0,2,1) #batchsize,num_patches,embedding_dim
@@ -144,12 +147,13 @@ class ClassTokenEmbedding(nn.Module):
                  batch_size:int,
                  embedding_dim:int
                  ):
-        
         super().__init__()
-        
         self.class_token = nn.Parameter(torch.randn(batch_size,1,embedding_dim))
-            
+        # Move to device
+        self.to(device)
+        
     def forward(self,x):
+        x = x.to(device)
         image_embedded_class = torch.cat((self.class_token,x),dim=1)
         return image_embedded_class
     
@@ -164,12 +168,13 @@ class PositionEmbedding(nn.Module):
     def __init__(self,
                  embedding_dim:int,
                  patch_size:int):
-        
         super().__init__()
-        
         self.position_embedding = nn.Parameter(torch.randn(1,patch_size,embedding_dim))
+        # Move to device
+        self.to(device)
 
     def forward(self,x):
+        x = x.to(device)
         return x + self.position_embedding
 
 # position_embedding = PositionEmbedding(embedding_dim=embbeding_with_class.shape[-1],
@@ -191,42 +196,37 @@ class ImageEmbedding(nn.Module):
                  in_channels:int=3,
                  patch_size:int=16
                  ):
-        
+        super().__init__()
         self.embedding_dim = embedding_dim
         self.in_channels = in_channels
         self.patch_size = patch_size
-
-        super().__init__()
         
         self.patch_embedding = PatchEmbedding(in_channels=self.in_channels,
                                               patch_size=self.patch_size,
                                               embedding_dim=self.embedding_dim)
-        
-        # Initialize class token with batch_size=1, we'll expand it in forward
-        # self.class_token = nn.Parameter(torch.randn(1, 1, embedding_dim))
+        # Move to device
+        self.to(device)
         
     def forward(self,x):
+        x = x.to(device)
         batch_size = x.shape[0]
         x_patched = self.patch_embedding(x)
-        print(f"X patched shape:{x_patched.shape}")
+        # print(f"X patched shape:{x_patched.shape}")
         
-        # Expand class token to match batch size
         class_token = ClassTokenEmbedding(batch_size=batch_size,
-                                              embedding_dim=self.embedding_dim)
-        # class_token = self.class_token.expand(batch_size, -1, -1)
-        # x_class_token = torch.cat((class_token, x_patched), dim=1)
+                                         embedding_dim=self.embedding_dim)
         x_class_token = class_token(x_patched)
-        print(f"X class token shape:{x_class_token.shape}")
+        # print(f"X class token shape:{x_class_token.shape}")
         
-        self.position_embedding = PositionEmbedding(embedding_dim=self.embedding_dim,
-                                                    patch_size=x_class_token.shape[1])
-        x_position_embedding = self.position_embedding(x_class_token)
+        position_embedding = PositionEmbedding(embedding_dim=self.embedding_dim,
+                                              patch_size=x_class_token.shape[1])
+        x_position_embedding = position_embedding(x_class_token)
         return x_position_embedding
 
 
-image_embedding = ImageEmbedding(embedding_dim=embendding_dim)
+# image_embedding = ImageEmbedding(embedding_dim=embendding_dim)
 
-print(f"Image embedding shape:{image_embedding(image_batch).shape}")
+# print(f"Image embedding shape:{image_embedding(image_batch).shape}")
     
             
 #MULTI HEAD ATTENTION
@@ -236,31 +236,27 @@ class MultiHeadAttention(nn.Module):
                  num_heads:int=12,
                  attn_dropout:float=0.0):
         super().__init__()
-        
         self.layernorm = nn.LayerNorm(normalized_shape=embedding_dim)
         self.multi_head_attention = nn.MultiheadAttention(embed_dim=embedding_dim,
                                                          num_heads=num_heads,
                                                          dropout=attn_dropout,
                                                          batch_first=True)
-        # Move all parameters to device
+        # Move to device
         self.to(device)
         
     def forward(self,x):
-        # Ensure input is on the correct device
         x = x.to(device)
-        # Apply layer norm
         x = self.layernorm(x)
-        # Get attention output
         attn_output, _ = self.multi_head_attention(query=x,
                                                  key=x,
                                                  value=x,
                                                  need_weights=False)
         return attn_output
 
-multi_head_attention = MultiHeadAttention(embedding_dim=embendding_dim)
+# multi_head_attention = MultiHeadAttention(embedding_dim=embendding_dim)
 #in genarally this is out put which batch from (batch_size,num_patches,embedding_dim)
 #that have the most attention 
-print(f"Multi head attention shape:{multi_head_attention(image_embedding(image_batch)).shape}")
+# print(f"Multi head attention shape:{multi_head_attention(image_embedding(image_batch)).shape}")
 
 class MLPBlock(nn.Module):
     def __init__(self,
@@ -268,7 +264,6 @@ class MLPBlock(nn.Module):
                  mlp_size:int=3072,
                  dropout:float=0.1):
         super().__init__()
-        
         self.layernorm = nn.LayerNorm(normalized_shape=embedding_dim)
         self.mlp = nn.Sequential(
             nn.Linear(in_features=embedding_dim,
@@ -276,11 +271,10 @@ class MLPBlock(nn.Module):
             nn.GELU(),
             nn.Dropout(dropout),
             nn.Linear(in_features=mlp_size,out_features=embedding_dim))
-        # Move all parameters to device
+        # Move to device
         self.to(device)
         
     def forward(self,x):
-        # Ensure input is on the correct device
         x = x.to(device)
         x = self.layernorm(x)
         x = self.mlp(x)
@@ -293,45 +287,115 @@ class TransformerEncoderBlock(nn.Module):
                  mlp_size:int=3072,
                  dropout:float=0.1):
         super().__init__()
-        
         self.embedding_dim = embedding_dim
         self.num_heads = num_heads
         self.mlp_size = mlp_size
         self.dropout = dropout
         
-        # Initialize submodules
         self.multi_head_attention = MultiHeadAttention(embedding_dim=self.embedding_dim,
                                                       num_heads=self.num_heads)
         self.mlp_block = MLPBlock(embedding_dim=self.embedding_dim,
                                  mlp_size=self.mlp_size,
                                  dropout=self.dropout)
-        # Move all parameters to device
+        # Move to device
         self.to(device)
         
     def forward(self,x):
-        # Ensure input is on the correct device
         x = x.to(device)
-        # Apply attention and residual connection
         x = self.multi_head_attention(x) + x
-        # Apply MLP and residual connection
         x = self.mlp_block(x) + x
         return x
 
-transformer_encoder_block = TransformerEncoderBlock(embedding_dim=embendding_dim)
+# transformer_encoder_block = TransformerEncoderBlock(embedding_dim=embendding_dim)
 
-encoded_output = transformer_encoder_block(image_embedding(image_batch))
-print(f"Transformer encoder block shape:{encoded_output.shape}")
+# encoded_output = transformer_encoder_block(image_embedding(image_batch))
+# print(f"Transformer encoder block shape:{encoded_output.shape}")
 
-summary(transformer_encoder_block,input_size=encoded_output.shape,
-        col_names=["input_size","output_size","num_params","trainable"],
-        col_width=20,
-        depth=1)
+# summary(transformer_encoder_block,input_size=encoded_output.shape,
+#         col_names=["input_size","output_size","num_params","trainable"],
+#         col_width=20,
+#         depth=1)
 
+class VIT(nn.Module):
+    def __init__(self,
+                 embedding_dim:int=768,
+                 num_heads:int=12,
+                 mlp_size:int=3072,
+                 dropout:float=0.1,
+                 num_transformer_layers:int=12,
+                 num_classes:int=1000,
+                 img_size:int=224,
+                 patch_size:int=16):
+        super().__init__()
+        self.embedding_dim = embedding_dim
+        self.num_heads = num_heads
+        self.mlp_size = mlp_size
+        self.dropout = dropout
+        self.num_transformer_layers = num_transformer_layers
+        self.num_classes = num_classes
+        self.img_size = img_size
+        self.patch_size = patch_size
+        
+        self.num_patches = (self.img_size // self.patch_size) ** 2
+        
+        self.image_embedding = ImageEmbedding(embedding_dim=self.embedding_dim,
+                                             patch_size=self.patch_size)
+        
+        self.transfromer_encoder_layers = nn.Sequential(*[TransformerEncoderBlock(embedding_dim=self.embedding_dim,
+                                                             num_heads=self.num_heads,
+                                                             mlp_size=self.mlp_size,
+                                                             dropout=self.dropout)
+                                                     for _ in range(self.num_transformer_layers)])
+        
+        self.classifier = nn.Sequential(
+            nn.LayerNorm(normalized_shape=self.embedding_dim),
+            nn.Linear(in_features=self.embedding_dim,out_features=self.num_classes)
+        )
+        # Move to device
+        self.to(device)
+        
+    def forward(self,x):
+        x = x.to(device)
+        x = self.image_embedding(x)  # [batch_size, num_patches + 1, embedding_dim]
+        x = self.transfromer_encoder_layers(x)  # [batch_size, num_patches + 1, embedding_dim]
+        
+        # Extract only the class token (first token) for classification
+        class_token = x[:, 0, :]  # [batch_size, embedding_dim]
+        
+        # Pass through classifier
+        x = self.classifier(class_token)  # [batch_size, num_classes]
+        return x
 
+vit = VIT(embedding_dim=embendding_dim,
+          num_heads=12,
+          mlp_size=3072,
+          dropout=0.1,
+          num_transformer_layers=12,
+          num_classes=len(classes_name),
+          img_size=224,
+          patch_size=16)
 
+print(f"VIT shape:{vit(image_batch).shape}")
 
+# summary(vit,input_size=[1,3,244,244],
+#         col_names=["input_size","output_size","num_params","trainable"],
+#         col_width=20,
+#         depth=1)
 
+optimizer = torch.optim.Adam(params=vit.parameters(),
+                             lr=0.001,
+                             betas=(0.9,0.999),
+                             weight_decay=0.1)
 
+loss_fn = nn.CrossEntropyLoss()
+
+results = engine.train(model=vit,
+                       train_dataloader=train_dataloader,
+                       test_dataloader=test_dataloader,
+                       optimizer=optimizer,
+                       loss_fn=loss_fn,
+                       epochs=5,
+                       device=device)
 
 
 
