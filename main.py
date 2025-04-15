@@ -242,10 +242,16 @@ class MultiHeadAttention(nn.Module):
                                                          num_heads=num_heads,
                                                          dropout=attn_dropout,
                                                          batch_first=True)
+        # Move all parameters to device
+        self.to(device)
         
     def forward(self,x):
+        # Ensure input is on the correct device
+        x = x.to(device)
+        # Apply layer norm
         x = self.layernorm(x)
-        attn_output,_ = self.multi_head_attention(query=x,
+        # Get attention output
+        attn_output, _ = self.multi_head_attention(query=x,
                                                  key=x,
                                                  value=x,
                                                  need_weights=False)
@@ -269,13 +275,63 @@ class MLPBlock(nn.Module):
                       out_features=mlp_size),
             nn.GELU(),
             nn.Dropout(dropout),
-            nn.Linear(in_features=mlp_size,out_features=embedding_dim)
-        )
+            nn.Linear(in_features=mlp_size,out_features=embedding_dim))
+        # Move all parameters to device
+        self.to(device)
+        
     def forward(self,x):
+        # Ensure input is on the correct device
+        x = x.to(device)
         x = self.layernorm(x)
         x = self.mlp(x)
         return x
-    
-mlp_block = MLPBlock(embedding_dim=embendding_dim)
 
-print(f"MLP block shape:{mlp_block(image_embedding(image_batch)).shape}")
+class TransformerEncoderBlock(nn.Module):
+    def __init__(self,
+                 embedding_dim:int=768,
+                 num_heads:int=12,
+                 mlp_size:int=3072,
+                 dropout:float=0.1):
+        super().__init__()
+        
+        self.embedding_dim = embedding_dim
+        self.num_heads = num_heads
+        self.mlp_size = mlp_size
+        self.dropout = dropout
+        
+        # Initialize submodules
+        self.multi_head_attention = MultiHeadAttention(embedding_dim=self.embedding_dim,
+                                                      num_heads=self.num_heads)
+        self.mlp_block = MLPBlock(embedding_dim=self.embedding_dim,
+                                 mlp_size=self.mlp_size,
+                                 dropout=self.dropout)
+        # Move all parameters to device
+        self.to(device)
+        
+    def forward(self,x):
+        # Ensure input is on the correct device
+        x = x.to(device)
+        # Apply attention and residual connection
+        x = self.multi_head_attention(x) + x
+        # Apply MLP and residual connection
+        x = self.mlp_block(x) + x
+        return x
+
+transformer_encoder_block = TransformerEncoderBlock(embedding_dim=embendding_dim)
+
+encoded_output = transformer_encoder_block(image_embedding(image_batch))
+print(f"Transformer encoder block shape:{encoded_output.shape}")
+
+summary(transformer_encoder_block,input_size=encoded_output.shape,
+        col_names=["input_size","output_size","num_params","trainable"],
+        col_width=20,
+        depth=1)
+
+
+
+
+
+
+
+
+
