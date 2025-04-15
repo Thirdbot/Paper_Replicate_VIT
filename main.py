@@ -128,15 +128,15 @@ class PatchEmbedding(nn.Module):
         return x_flattened_transpose
 
 
-patchify = PatchEmbedding(in_channels=3,
-                          patch_size=16,
-                          embedding_dim=768)
+# patchify = PatchEmbedding(in_channels=3,
+#                           patch_size=16,
+#                           embedding_dim=768)
 
-print(f"Patchify shape:{patchify(image.unsqueeze(0)).shape}")
+# print(f"Patchify shape:{patchify(image.unsqueeze(0)).shape}")
 
-#CREATE CLASS TOKEN EMBEDDING LAYERS
+# #CREATE CLASS TOKEN EMBEDDING LAYERS
  
-patch_embedding = patchify(image.unsqueeze(0))
+# patch_embedding = patchify(image.unsqueeze(0))
 
 class ClassTokenEmbedding(nn.Module):
     def __init__(self,
@@ -147,17 +147,16 @@ class ClassTokenEmbedding(nn.Module):
         super().__init__()
         
         self.class_token = nn.Parameter(torch.randn(batch_size,1,embedding_dim))
-       
-    
+            
     def forward(self,x):
         image_embedded_class = torch.cat((self.class_token,x),dim=1)
         return image_embedded_class
     
-class_tokenning = ClassTokenEmbedding(batch_size=patch_embedding.shape[0],
-                                      embedding_dim=patch_embedding.shape[-1])
+# class_tokenning = ClassTokenEmbedding(batch_size=patch_embedding.shape[0],
+#                                       embedding_dim=patch_embedding.shape[-1])
 
-embbeding_with_class = class_tokenning(patch_embedding)
-print(f"Class tokenning shape:{embbeding_with_class.shape}")
+# embbeding_with_class = class_tokenning(patch_embedding)
+# print(f"Class tokenning shape:{embbeding_with_class.shape}")
 
 class PositionEmbedding(nn.Module):
     def __init__(self,
@@ -171,12 +170,53 @@ class PositionEmbedding(nn.Module):
     def forward(self,x):
         return x + self.position_embedding
 
-position_embedding = PositionEmbedding(embedding_dim=embbeding_with_class.shape[-1],
-                                       patch_size=embbeding_with_class.shape[1])
+# position_embedding = PositionEmbedding(embedding_dim=embbeding_with_class.shape[-1],
+#                                        patch_size=embbeding_with_class.shape[1])
 
 
-class_position_embedding = position_embedding(embbeding_with_class)
+# class_position_embedding = position_embedding(embbeding_with_class)
 
-print(f"Class position embedding shape:{class_position_embedding.shape}")
+# print(f"Class position embedding shape:{class_position_embedding.shape}")
 
 
+class ImageEmbedding(nn.Module):
+    def __init__(self,
+                 embedding_dim:int,
+                 in_channels:int=3,
+                 patch_size:int=16
+                 ):
+        
+        self.embedding_dim = embedding_dim
+        self.in_channels = in_channels
+        self.patch_size = patch_size
+
+        super().__init__()
+        
+        self.patch_embedding = PatchEmbedding(in_channels=self.in_channels,
+                                              patch_size=self.patch_size,
+                                              embedding_dim=self.embedding_dim)
+        
+        # Initialize class token with batch_size=1, we'll expand it in forward
+        self.class_token = nn.Parameter(torch.randn(1, 1, embedding_dim))
+        
+    def forward(self,x):
+        batch_size = x.shape[0]
+        x_patched = self.patch_embedding(x)
+        print(f"X patched shape:{x_patched.shape}")
+        
+        # Expand class token to match batch size
+        class_token = self.class_token.expand(batch_size, -1, -1)
+        x_class_token = torch.cat((class_token, x_patched), dim=1)
+        print(f"X class token shape:{x_class_token.shape}")
+        
+        self.position_embedding = PositionEmbedding(embedding_dim=self.embedding_dim,
+                                                    patch_size=x_class_token.shape[1])
+        x_position_embedding = self.position_embedding(x_class_token)
+        return x_position_embedding
+
+
+image_embedding = ImageEmbedding(embedding_dim=embendding_dim)
+
+print(f"Image embedding shape:{image_embedding(image_batch).shape}")
+    
+            
