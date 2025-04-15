@@ -16,6 +16,7 @@ from helper_module.grid_visual import patcher_visual
 from helper_module.single_visual import single_image_visual
 from helper_module.grid_visual import grid_index_visual
 
+from helper_functions import plot_loss_curves
 import matplotlib.pyplot as plt
 import random
 
@@ -394,8 +395,8 @@ results = engine.train(model=vit,
                        test_dataloader=test_dataloader,
                        optimizer=optimizer,
                        loss_fn=loss_fn,
-                       epochs=5,
+                       epochs=3,
                        device=device)
 
-
+plot_loss_curves(results)
 

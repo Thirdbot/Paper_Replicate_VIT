@@ -162,6 +162,8 @@ def plot_loss_curves(results):
     plt.title("Accuracy")
     plt.xlabel("Epochs")
     plt.legend()
+    
+    plt.show()
 
 
 # Pred and plot image function from notebook 04
