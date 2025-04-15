@@ -103,7 +103,7 @@ embendding_dim = 768
 #             classes_name=classes_name,
 #             label=label)
 
-#CREATE PATCH EMBEDDING LAYERS
+#PATCH EMBEDDING
 class PatchEmbedding(nn.Module):
     def __init__(self,
                  in_channels:int=3,
@@ -138,6 +138,7 @@ class PatchEmbedding(nn.Module):
  
 # patch_embedding = patchify(image.unsqueeze(0))
 
+#CLASS TOKEN EMBEDDING
 class ClassTokenEmbedding(nn.Module):
     def __init__(self,
                  batch_size:int,
@@ -158,6 +159,7 @@ class ClassTokenEmbedding(nn.Module):
 # embbeding_with_class = class_tokenning(patch_embedding)
 # print(f"Class tokenning shape:{embbeding_with_class.shape}")
 
+#POSITION EMBEDDING
 class PositionEmbedding(nn.Module):
     def __init__(self,
                  embedding_dim:int,
@@ -179,6 +181,10 @@ class PositionEmbedding(nn.Module):
 # print(f"Class position embedding shape:{class_position_embedding.shape}")
 
 
+
+
+
+#IMAGE EMBEDDING
 class ImageEmbedding(nn.Module):
     def __init__(self,
                  embedding_dim:int,
@@ -197,7 +203,7 @@ class ImageEmbedding(nn.Module):
                                               embedding_dim=self.embedding_dim)
         
         # Initialize class token with batch_size=1, we'll expand it in forward
-        self.class_token = nn.Parameter(torch.randn(1, 1, embedding_dim))
+        # self.class_token = nn.Parameter(torch.randn(1, 1, embedding_dim))
         
     def forward(self,x):
         batch_size = x.shape[0]
@@ -205,8 +211,11 @@ class ImageEmbedding(nn.Module):
         print(f"X patched shape:{x_patched.shape}")
         
         # Expand class token to match batch size
-        class_token = self.class_token.expand(batch_size, -1, -1)
-        x_class_token = torch.cat((class_token, x_patched), dim=1)
+        class_token = ClassTokenEmbedding(batch_size=batch_size,
+                                              embedding_dim=self.embedding_dim)
+        # class_token = self.class_token.expand(batch_size, -1, -1)
+        # x_class_token = torch.cat((class_token, x_patched), dim=1)
+        x_class_token = class_token(x_patched)
         print(f"X class token shape:{x_class_token.shape}")
         
         self.position_embedding = PositionEmbedding(embedding_dim=self.embedding_dim,
