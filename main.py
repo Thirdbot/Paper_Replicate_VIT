@@ -147,17 +147,36 @@ class ClassTokenEmbedding(nn.Module):
         super().__init__()
         
         self.class_token = nn.Parameter(torch.randn(batch_size,1,embedding_dim))
-        self.image_embedded_class = torch.cat((self.class_token,patch_embedding),dim=1)
+       
     
-    def forward(self):
-        return self.image_embedded_class
+    def forward(self,x):
+        image_embedded_class = torch.cat((self.class_token,x),dim=1)
+        return image_embedded_class
     
 class_tokenning = ClassTokenEmbedding(batch_size=patch_embedding.shape[0],
                                       embedding_dim=patch_embedding.shape[-1])
 
-print(f"Class tokenning shape:{class_tokenning().shape}")
+embbeding_with_class = class_tokenning(patch_embedding)
+print(f"Class tokenning shape:{embbeding_with_class.shape}")
+
+class PositionEmbedding(nn.Module):
+    def __init__(self,
+                 embedding_dim:int,
+                 patch_size:int):
+        
+        super().__init__()
+        
+        self.position_embedding = nn.Parameter(torch.randn(1,patch_size,embedding_dim))
+
+    def forward(self,x):
+        return x + self.position_embedding
+
+position_embedding = PositionEmbedding(embedding_dim=embbeding_with_class.shape[-1],
+                                       patch_size=embbeding_with_class.shape[1])
 
 
+class_position_embedding = position_embedding(embbeding_with_class)
 
+print(f"Class position embedding shape:{class_position_embedding.shape}")
 
 
