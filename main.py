@@ -135,6 +135,43 @@ single_image_visual(image=single_flatten_image,
                     label=label)
 
 
+#CREATE PATCH EMBEDDING LAYERS
+class PatchEmbedding(nn.Module):
+    def __init__(self,
+                 in_channels:int=3,
+                 patch_size:int=16,
+                 embedding_dim:int=768,
+                 ):
+        super().__init__()
+        #given image shape is batchsize,channel,height,width
+        #the patch size is 16 so we need to split the image into 16x16 patch
+        self.patcher = nn.Conv2d(in_channels=in_channels,
+                                 out_channels=embedding_dim,
+                                 kernel_size=patch_size,
+                                 stride=patch_size,
+                                 padding=0)
+        #current shape after flattening is collasping of last 2 dims
+        self.flatten = nn.Flatten(start_dim=2,end_dim=3)
+        
+    def forward(self,x):
+        x_patched= self.patcher(x) #batchsize,channel,height,width
+        x_flattened = self.flatten(x_patched) #batchsize,embedding_dim,num_patches
+        x_flattened_transpose = x_flattened.permute(0,2,1) #batchsize,num_patches,embedding_dim
+        return x_flattened_transpose
+
+
+patchify = PatchEmbedding(in_channels=3,
+                          patch_size=16,
+                          embedding_dim=768)
+
+print(f"Patchify shape:{patchify(image.unsqueeze(0)).shape}")
+
+
+
+
+
+
+
 
 
 
