@@ -325,7 +325,7 @@ class VIT(nn.Module):
                  dropout:float=0.1,
                  num_transformer_layers:int=12,
                  num_classes:int=1000,
-                 img_size:int=224,
+                 img_size:int=244,
                  patch_size:int=16):
         super().__init__()
         self.embedding_dim = embedding_dim
@@ -358,45 +358,135 @@ class VIT(nn.Module):
     def forward(self,x):
         x = x.to(device)
         x = self.image_embedding(x)  # [batch_size, num_patches + 1, embedding_dim]
-        x = self.transfromer_encoder_layers(x)  # [batch_size, num_patches + 1, embedding_dim]
+        encoder_output = self.transfromer_encoder_layers(x)  # [batch_size, num_patches + 1, embedding_dim]
         
         # Extract only the class token (first token) for classification
-        class_token = x[:, 0, :]  # [batch_size, embedding_dim]
+        class_token = encoder_output[:, 0, :]  # [batch_size, embedding_dim]
         
         # Pass through classifier
         x = self.classifier(class_token)  # [batch_size, num_classes]
-        return x
+        return x,encoder_output
 
+
+
+
+class WeightModel(nn.Module):
+    def __init__(self,embedding_dim:int=768,
+                 extend:int=1,
+                 hidden_dim:int=2):
+        super().__init__()
+        self.embedding_dim = embedding_dim
+        self.extend = extend
+        self.hidden_dim = hidden_dim
+        self.linear = nn.Linear(in_features=self.hidden_dim*self.embedding_dim,out_features=self.embedding_dim)
+        self.to(device)
+    
+    def forward(self,x):
+        x = x.to(device)
+        batch_size = x.shape[0]
+        #row,batch,patch,hidden,embedding
+        weight = nn.Parameter(torch.randn(1,batch_size,x.shape[1],self.hidden_dim,self.embedding_dim))
+        weight = weight.to(device)
+        #unsqueeze weight to batch,row,patch,hidden,1,embedding
+        # weight = weight.unsqueeze(4)
+        #permute weight to batch,row,patch,hidden,embedding
+        weight = weight.permute(1,0,2,3,4)
+            
+        # print(f"Weight shape:{weight.shape}")
+        
+        # Now do the unsqueeze operations
+        expanded_x = x.unsqueeze(0)  # Add row dimension
+        unsqueeze_x = expanded_x.unsqueeze(3)  # Add patch dimension
+        # unsqueeze_x = unsqueeze_x.unsqueeze(4)  # Add embedding dimension
+        unsqueeze_x = unsqueeze_x.expand(1,batch_size,x.shape[1],self.hidden_dim,x.shape[2])# Add hidden dimensio
+        # Permute to match weight dimensions
+        permute_x = unsqueeze_x.permute(1,0,2,3,4)
+        
+        output = torch.einsum('b a h s e, b a h s e -> b h e a', permute_x, weight)
+        print(f"Modify x shape:{output.shape}")
+        
+        output_concat = torch.cat((expanded_x.permute(1,2,3,0),output),dim=-1)
+        # output_permute = output_concat.permute(1,0,2,3)
+        # output_permute = output_permute.permute(0,2,1,3)
+        print(f"Output shape:{output_concat.shape}")
+        
+        output_flattern = output_concat.flatten(start_dim=2,end_dim=3)
+        x = nn.Parameter(output_flattern)
+        output_linear = self.linear(x)
+        print(f"Output flattern shape:{output_linear.shape}")
+        return output_linear
+
+
+# Create both models
 vit = VIT(embedding_dim=embendding_dim,
           num_heads=12,
           mlp_size=3072,
           dropout=0.1,
           num_transformer_layers=12,
           num_classes=len(classes_name),
-          img_size=224,
+          img_size=IMG_SIZE,
           patch_size=16)
 
-print(f"VIT shape:{vit(image_batch).shape}")
+# vit_output,vit_encoder_output = vit(image_batch)
+# print(f"VIT shape:{vit_output.shape}")
+# print(f"VIT encoder output:{vit_encoder_output}")
+# print(f"VIT encoder output shape:{vit_encoder_output.shape}")
 
-# summary(vit,input_size=[1,3,244,244],
-#         col_names=["input_size","output_size","num_params","trainable"],
-#         col_width=20,
-#         depth=1)
+weight_model = WeightModel(embedding_dim=embendding_dim)
 
-optimizer = torch.optim.Adam(params=vit.parameters(),
-                             lr=0.001,
-                             betas=(0.9,0.999),
-                             weight_decay=0.1)
+# Create a combined model that uses both ViT and WeightModel
+class CombinedModel(nn.Module):
+    def __init__(self, vit_model, weight_model):
+        super().__init__()
+        self.vit = vit_model
+        self.weight_model = weight_model
+        self.num_classes = self.vit.num_classes
+        self.classifier = nn.Sequential(
+            nn.LayerNorm(normalized_shape=self.vit.embedding_dim),
+            nn.Linear(in_features=self.vit.embedding_dim,out_features=self.num_classes)
+        )
+        
+    def forward(self, x):
+        # Get ViT output
+        vit_output, encoder_output = self.vit(x)
+        
+        # Get weights from weight model
+        weights = self.weight_model(encoder_output)
+        
+        # Ensure weights have the same batch size as encoder_output
+        if weights.shape[0] != encoder_output.shape[0]:
+            weights = weights[:encoder_output.shape[0]]
+            
+        # Apply weights to encoder output
+        weighted_output = encoder_output * weights.squeeze()
+        
+        # Extract class token
+        class_token = weighted_output[:, 0, :]  # [batch_size, embedding_dim]
+        
+        # Pass through classifier
+        x = self.classifier(class_token)  # [batch_size, num_classes]
+        return x
 
+# Create combined model
+combined_model = CombinedModel(vit, weight_model)
+
+# Create optimizer
+optimizer = torch.optim.Adam(params=combined_model.parameters(),
+                            lr=0.001,
+                            betas=(0.9,0.999),
+                            weight_decay=0.1)
+
+# Loss function
 loss_fn = nn.CrossEntropyLoss()
 
-results = engine.train(model=vit,
-                       train_dataloader=train_dataloader,
-                       test_dataloader=test_dataloader,
-                       optimizer=optimizer,
-                       loss_fn=loss_fn,
-                       epochs=3,
-                       device=device)
+# Train the combined model
+results = engine.train(model=combined_model,
+                      train_dataloader=train_dataloader,
+                      test_dataloader=test_dataloader,
+                      optimizer=optimizer,
+                      loss_fn=loss_fn,
+                      epochs=3,
+                      device=device)
 
 plot_loss_curves(results)
 
