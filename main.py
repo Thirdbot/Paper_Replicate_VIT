@@ -7,6 +7,7 @@ print(f"Torch ver:{torch.__version__}")
 print(f"TorchVision ver:{torchvision.__version__}")
 
 from torch import nn
+import torch.nn.functional as f
 from torchvision import transforms
 from torchinfo import summary
 from going_modular import data_setup,engine
@@ -19,6 +20,7 @@ from helper_module.grid_visual import grid_index_visual
 from helper_functions import plot_loss_curves
 import matplotlib.pyplot as plt
 import random
+
 
 #set up device for gpu
 device = 'cuda' if torch.cuda.is_available() else "cpu"
@@ -372,19 +374,19 @@ class VIT(nn.Module):
 
 class WeightModel(nn.Module):
     def __init__(self,embedding_dim:int=768,
+                 batch_size:int=32,
                  extend:int=1,
                  hidden_dim:int=2):
         super().__init__()
         self.embedding_dim = embedding_dim
         self.extend = extend
         self.hidden_dim = hidden_dim
-        self.linear = nn.Linear(in_features=self.hidden_dim*self.embedding_dim,out_features=self.embedding_dim)
+        self.list_weight = torch.tensor([],device=device)
+        self.batch_size = batch_size
         self.to(device)
     
     def forward(self,x):
-        x = x.to(device)
-        batch_size = x.shape[0]
-        #row,batch,patch,hidden,embedding
+        x = x.to(device)        #row,batch,patch,hidden,embedding
         weight = nn.Parameter(torch.randn(1,batch_size,x.shape[1],self.hidden_dim,self.embedding_dim))
         weight = weight.to(device)
         #unsqueeze weight to batch,row,patch,hidden,1,embedding
@@ -394,7 +396,13 @@ class WeightModel(nn.Module):
             
         # print(f"Weight shape:{weight.shape}")
         
-        # Now do the unsqueeze operations
+        #pad with zero ensure batch size is the same
+        padding=torch.zeros((self.batch_size-x.shape[0],x.shape[1],self.embedding_dim))        
+        x = f.pad(x,pad=(0,0,0,0,0,padding.shape[0]))
+        
+        # print(f"Padding shape:{x.shape}")
+        
+        # Now do the unsqueeze operations of x
         expanded_x = x.unsqueeze(0)  # Add row dimension
         unsqueeze_x = expanded_x.unsqueeze(3)  # Add patch dimension
         # unsqueeze_x = unsqueeze_x.unsqueeze(4)  # Add embedding dimension
@@ -402,18 +410,28 @@ class WeightModel(nn.Module):
         # Permute to match weight dimensions
         permute_x = unsqueeze_x.permute(1,0,2,3,4)
         
-        output = torch.einsum('b a h s e, b a h s e -> b h e a', permute_x, weight)
-        print(f"Modify x shape:{output.shape}")
+        #perfrom collasp dim
+        output = torch.einsum('b a h s e, b a h s e -> a b h e', permute_x, weight)
+        # print(f"Modify x shape:{output.shape}")
         
-        output_concat = torch.cat((expanded_x.permute(1,2,3,0),output),dim=-1)
+        
+        #concatenate output with list_weight
+        self.list_weight = torch.cat((self.list_weight,output),0)
+        # print(f"List weight shape:{self.list_weight.shape}")
+        list_concat = torch.cat((self.list_weight,output),0)
+        # print(f"List concat shape:{list_concat.shape}")
         # output_permute = output_concat.permute(1,0,2,3)
-        # output_permute = output_permute.permute(0,2,1,3)
-        print(f"Output shape:{output_concat.shape}")
+        output_permute = list_concat.permute(1,2,3,0)
         
-        output_flattern = output_concat.flatten(start_dim=2,end_dim=3)
+        #flatten concatenate output
+        output_flattern = output_permute.flatten(start_dim=2,end_dim=3)
         x = nn.Parameter(output_flattern)
-        output_linear = self.linear(x)
-        print(f"Output flattern shape:{output_linear.shape}")
+        print(f"Output flatten shape:{output_flattern.shape}")
+        
+        #reshape output to batch,patch,hidden,embedding
+        linear = nn.Linear(in_features=output_flattern.shape[2],out_features=self.embedding_dim).to(device)
+        output_linear = linear(x)
+        print(f"Output linear shape:{output_linear.shape}")
         return output_linear
 
 
@@ -432,7 +450,7 @@ vit = VIT(embedding_dim=embendding_dim,
 # print(f"VIT encoder output:{vit_encoder_output}")
 # print(f"VIT encoder output shape:{vit_encoder_output.shape}")
 
-weight_model = WeightModel(embedding_dim=embendding_dim)
+weight_model = WeightModel(embedding_dim=embendding_dim,batch_size=32)
 
 # Create a combined model that uses both ViT and WeightModel
 class CombinedModel(nn.Module):
