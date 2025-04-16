@@ -6,10 +6,12 @@ import torch
 from tqdm.auto import tqdm
 from typing import Dict, List, Tuple
 
-def train_step(model: torch.nn.Module, 
+def train_step(model1: torch.nn.Module, 
+               model2: torch.nn.Module,
                dataloader: torch.utils.data.DataLoader, 
                loss_fn: torch.nn.Module, 
                optimizer: torch.optim.Optimizer,
+               weight_optimizer: torch.optim.Optimizer,
                device: torch.device) -> Tuple[float, float]:
     """Trains a PyTorch model for a single epoch.
 
@@ -31,40 +33,63 @@ def train_step(model: torch.nn.Module,
     (0.1112, 0.8743)
     """
     # Put model in train mode
-    model.train()
+    model1.train()
+    model2.train()
 
     # Setup train loss and train accuracy values
-    train_loss, train_acc = 0, 0
+    vit_train_loss, vit_train_acc = 0, 0
+    weight_train_loss, weight_train_acc = 0, 0
 
     # Loop through data loader data batches
     for batch, (X, y) in enumerate(dataloader):
         # Send data to target device
         X, y = X.to(device), y.to(device)
 
-        # 1. Forward pass
-        y_pred = model(X)
-
+        # 1. Forward pass  2 model
+        y_pred,vit_encoder_output = model1(X)
+        weights = model2(vit_encoder_output)
+        #  # Ensure weights have the same batch size as encoder_output
+        # if weights.shape[0] != encoder_output.shape[0]:
+        #     weights = weights[:encoder_output.shape[0]]
+            
+        # Apply weights to encoder output
+        # print(f"Encoder output shape:{encoder_output.shape}")
+        
+        #batch matrix muktiplication using einsum
+        weighted_output = torch.einsum('b p e, e p b -> b p e', vit_encoder_output, weights.transpose(0,2))
+        # print(f"Weight shape:{weighted_output.shape}")
+        
+       
+        
+        
         # 2. Calculate  and accumulate loss
-        loss = loss_fn(y_pred, y)
-        train_loss += loss.item() 
+        vit_loss = loss_fn(y_pred, y)
+        weight_loss = loss_fn(weighted_output, vit_encoder_output)
+        vit_train_loss += vit_loss.item() 
+        weight_train_loss += weight_loss.item() 
 
         # 3. Optimizer zero grad
         optimizer.zero_grad()
-
+        weight_optimizer.zero_grad()
         # 4. Loss backward
-        loss.backward()
+        vit_loss.backward()
+        weight_loss.backward()
 
         # 5. Optimizer step
         optimizer.step()
-
+        weight_optimizer.step()
         # Calculate and accumulate accuracy metric across all batches
         y_pred_class = torch.argmax(torch.softmax(y_pred, dim=1), dim=1)
-        train_acc += (y_pred_class == y).sum().item()/len(y_pred)
+        vit_train_acc += (y_pred_class == y).sum().item()/len(y_pred)
+        weight_train_acc += (weighted_output == vit_encoder_output).sum().item()/len(weighted_output)
+        
 
     # Adjust metrics to get average loss and accuracy per batch 
-    train_loss = train_loss / len(dataloader)
-    train_acc = train_acc / len(dataloader)
-    return train_loss, train_acc
+    vit_train_loss = vit_train_loss / len(dataloader)
+    weight_train_loss = weight_train_loss / len(dataloader)
+    vit_train_acc = vit_train_acc / len(dataloader)
+    weight_train_acc = weight_train_acc / len(dataloader)
+    return vit_train_loss, weight_train_loss, vit_train_acc, weight_train_acc
 
 def test_step(model: torch.nn.Module, 
               dataloader: torch.utils.data.DataLoader, 
