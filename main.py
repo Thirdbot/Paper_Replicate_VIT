@@ -135,7 +135,7 @@ class PatchEmbedding(nn.Module):
         x_flattened_transpose = x_flattened.permute(0,2,1) #batchsize,num_patches,embedding_dim
         padding=torch.zeros((self.batch_size-x_flattened_transpose.shape[0],x_flattened_transpose.shape[1],x_flattened_transpose.shape[2]))        
         x_flattened_transpose = f.pad(x_flattened_transpose,pad=(0,0,0,0,0,padding.shape[0]))
-        print(f"X flattened transpose shape:{x_flattened_transpose.shape}")
+        # print(f"X flattened transpose shape:{x_flattened_transpose.shape}")
         return x_flattened_transpose
 
 
@@ -439,24 +439,25 @@ class WeightModel(nn.Module):
         #concatenate output with list_weight
         self.list_weight.data = torch.cat((self.list_weight.data,output),0)
         # print(f"List weight shape:{self.list_weight.shape}")
-        # list_concat = torch.cat((self.list_weight.data,output),0)
-        # print(f"List concat shape:{list_concat.shape}")
-        # output_permute = output_concat.permute(1,0,2,3)
-        # output_permute = self.list_weight.permute(1,2,3,0)
+        
+        #sum concat weight
+        sum_weight = torch.sum(self.list_weight.data,dim=0)
         
         #flatten concatenate output
-        output_flatten = self.list_weight.flatten(start_dim=0,end_dim=1)
+        # output_flatten = self.list_weight.flatten(start_dim=0,end_dim=1)
         # print(f"Output flattern shape:{output_flatten.shape}")
-        output_flatten = output_flatten.transpose(0,2)
+        # output_flatten = output_flatten.transpose(0,2)
         # print(f"Output flattern shape:{output_flatten.shape}")
-        x = nn.Parameter(output_flatten)
+        # x = nn.Parameter(output_flatten)
         # print(f"Output flatten shape:{output_flattern.shape}")
         
         #reshape output to batch,patch,hidden,embedding
-        linear = nn.Linear(in_features=output_flatten.shape[2],out_features=self.batch_size).to(device)
-        output_linear = linear(output_flatten).transpose(0,2)
+        # linear = nn.Linear(in_features=output_flatten.shape[2],out_features=self.batch_size).to(device)
+        # output_linear = linear(output_flatten).transpose(0,2)
         # print(f"Output linear shape:{output_linear.shape}")
-        return output_linear
+        
+        # print(f"Sum weight shape:{sum_weight.shape}")
+        return sum_weight
 
 
 # Create both models

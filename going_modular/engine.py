@@ -44,7 +44,7 @@ def train_step(model1: torch.nn.Module,
     for batch, (X, y) in enumerate(dataloader):
         # Send data to target device
         X, y = X.to(device), y.to(device)
-        print(f"y shape:{y.shape}")
+        # print(f"y shape:{y.shape}")
         # padding=torch.zeros((batch_size-y.shape[0],y.shape[1],y.shape[2]))        
         # print(f"padding shape:{padding.shape}")
         # y = f.pad(y,pad=(0,0,0,0,0,padding.shape[0]))
@@ -67,7 +67,8 @@ def train_step(model1: torch.nn.Module,
         # print(f"Encoder output shape:{encoder_output.shape}")
         
         #batch matrix muktiplication using einsum
-        weighted_output = torch.einsum('b p e, e p b -> b p e', vit_encoder_output, weights.transpose(0,2))
+        # weighted_output = torch.einsum('b p e, e p b -> b p e', vit_encoder_output, weights.transpose(0,2))
+        weighted_output = weights
         # print(f"Weight shape:{weighted_output.shape}")
         
        
@@ -75,14 +76,13 @@ def train_step(model1: torch.nn.Module,
         
         # 2. Calculate  and accumulate loss
         
-        y_pred_class = torch.argmax(torch.softmax(y_pred, dim=1), dim=1)
-        print(f"y_pred_class shape:{y_pred_class.shape}")
-        print(f"y shape:{y.shape}")
+        # print(f"y_pred_class shape:{y_pred_class.shape}")
+        # print(f"y shape:{y.shape}")
         
         # padding=torch.zeros((batch_size-y.shape[0],y.shape[1],y.shape[2]))    
             
         y = f.pad(y,pad=(0,batch_size-y.shape[0]))
-        vit_loss = loss_fn(y_pred_class.type(torch.float32), y.type(torch.float32))
+        vit_loss = loss_fn(y_pred, y)
         # print("weight output shape:",weighted_output.shape)
         # print("vit encoder output shape:",vit_encoder_output.shape)
         weight_loss = loss_fn(weighted_output, vit_encoder_output)
@@ -101,6 +101,7 @@ def train_step(model1: torch.nn.Module,
         vit_optimizer.step()
         weight_optimizer.step()
         # Calculate and accumulate accuracy metric across all batches
+        y_pred_class = torch.argmax(torch.softmax(y_pred, dim=1), dim=1)
         vit_train_acc += (y_pred_class == y).sum().item()/len(y_pred)
         weight_train_acc += (weighted_output == vit_encoder_output).sum().item()/len(weighted_output)
         
@@ -116,7 +117,8 @@ def test_step(model1: torch.nn.Module,
               model2: torch.nn.Module,
               dataloader: torch.utils.data.DataLoader, 
               loss_fn: torch.nn.Module,
-              device: torch.device) -> Tuple[float, float]:
+              device: torch.device,
+              batch_size:int) -> Tuple[float, float]:
     """Tests a PyTorch model for a single epoch.
 
     Turns a target PyTorch model to "eval" mode and then performs
@@ -148,11 +150,12 @@ def test_step(model1: torch.nn.Module,
         for batch, (X, y) in enumerate(dataloader):
             # Send data to target device
             X, y = X.to(device), y.to(device)
-
+            y = f.pad(y,pad=(0,batch_size-y.shape[0]))
             # 1. Forward pass
             test_pred_logits,vit_encoder_output = model1(X)
             weights = model2(vit_encoder_output)
-
+            
+            
             # 2. Calculate and accumulate loss
             vit_loss = loss_fn(test_pred_logits, y)
             weight_loss = loss_fn(weights, vit_encoder_output)
@@ -239,7 +242,8 @@ def train(model1: torch.nn.Module,
           model2=model2,
           dataloader=test_dataloader,
           loss_fn=loss_fn,
-          device=device)
+          device=device,
+          batch_size=batch_size)
 
         # Print out what's happening
         print(
