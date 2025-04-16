@@ -112,6 +112,7 @@ class PatchEmbedding(nn.Module):
                  in_channels:int=3,
                  patch_size:int=16,
                  embedding_dim:int=768,
+                 batch_size:int=32
                  ):
         super().__init__()
         #given image shape is batchsize,channel,height,width
@@ -123,6 +124,7 @@ class PatchEmbedding(nn.Module):
                                  padding=0)
         #current shape after flattening is collasping of last 2 dims
         self.flatten = nn.Flatten(start_dim=2,end_dim=3)
+        self.batch_size = batch_size
         # Move to device
         self.to(device)
         
@@ -131,6 +133,9 @@ class PatchEmbedding(nn.Module):
         x_patched= self.patcher(x) #batchsize,channel,height,width
         x_flattened = self.flatten(x_patched) #batchsize,embedding_dim,num_patches
         x_flattened_transpose = x_flattened.permute(0,2,1) #batchsize,num_patches,embedding_dim
+        padding=torch.zeros((self.batch_size-x_flattened_transpose.shape[0],x_flattened_transpose.shape[1],x_flattened_transpose.shape[2]))        
+        x_flattened_transpose = f.pad(x_flattened_transpose,pad=(0,0,0,0,0,padding.shape[0]))
+        print(f"X flattened transpose shape:{x_flattened_transpose.shape}")
         return x_flattened_transpose
 
 
@@ -147,16 +152,22 @@ class PatchEmbedding(nn.Module):
 #CLASS TOKEN EMBEDDING
 class ClassTokenEmbedding(nn.Module):
     def __init__(self,
-                 batch_size:int,
-                 embedding_dim:int
+                 embedding_dim:int,
+                 batch_size:int=32
                  ):
         super().__init__()
-        self.class_token = nn.Parameter(torch.randn(batch_size,1,embedding_dim))
+        self.embedding_dim = embedding_dim
+        self.batch_size = batch_size
+        self.class_token = nn.Parameter(torch.randn(self.batch_size,1,embedding_dim))
+        
         # Move to device
         self.to(device)
         
     def forward(self,x):
         x = x.to(device)
+        # padding=torch.zeros((x.shape[0],x.shape[1],self.embedding_dim))        
+        # x = f.pad(x,pad=(0,0,0,0,0,padding.shape[0]))
+        
         image_embedded_class = torch.cat((self.class_token,x),dim=1)
         return image_embedded_class
     
@@ -212,18 +223,17 @@ class ImageEmbedding(nn.Module):
         
     def forward(self,x):
         x = x.to(device)
-        batch_size = x.shape[0]
         x_patched = self.patch_embedding(x)
         # print(f"X patched shape:{x_patched.shape}")
         
-        class_token = ClassTokenEmbedding(batch_size=batch_size,
-                                         embedding_dim=self.embedding_dim)
+        class_token = ClassTokenEmbedding(embedding_dim=self.embedding_dim,batch_size=x_patched.shape[0])
         x_class_token = class_token(x_patched)
         # print(f"X class token shape:{x_class_token.shape}")
         
         position_embedding = PositionEmbedding(embedding_dim=self.embedding_dim,
                                               patch_size=x_class_token.shape[1])
         x_position_embedding = position_embedding(x_class_token)
+        
         return x_position_embedding
 
 
@@ -367,6 +377,8 @@ class VIT(nn.Module):
         
         # Pass through classifier
         x = self.classifier(class_token)  # [batch_size, num_classes]
+    
+        
         return x,encoder_output
 
 
@@ -375,20 +387,29 @@ class VIT(nn.Module):
 class WeightModel(nn.Module):
     def __init__(self,embedding_dim:int=768,
                  batch_size:int=32,
-                 extend:int=1,
+                 weight_dim:int=226,
                  hidden_dim:int=2):
         super().__init__()
         self.embedding_dim = embedding_dim
-        self.extend = extend
         self.hidden_dim = hidden_dim
-        self.list_weight = torch.tensor([],device=device)
+        self.weight_dim = weight_dim
+        self.weight = nn.Parameter(torch.tensor([],device=device))
+
+        self.list_weight = nn.Parameter(torch.tensor([],device=device))
+        
         self.batch_size = batch_size
         self.to(device)
-    
+
     def forward(self,x):
         x = x.to(device)        #row,batch,patch,hidden,embedding
-        weight = nn.Parameter(torch.randn(1,batch_size,x.shape[1],self.hidden_dim,self.embedding_dim))
-        weight = weight.to(device)
+        # random_weight = nn.Parameter(torch.randn(1,self.batch_size,self.weight_dim,self.hidden_dim,self.embedding_dim).to(device))
+        self.weight.data = torch.randn(1,self.batch_size,self.weight_dim,self.hidden_dim,self.embedding_dim).to(device)
+       
+        # new_weight = torch.cat([self.weight.data, random_weight], 0)
+        # self.weight = nn.Parameter(new_weight)
+        # print(f"New weight shape:{self.weight.shape}")
+            
+        weight = self.weight.to(device)
         #unsqueeze weight to batch,row,patch,hidden,1,embedding
         # weight = weight.unsqueeze(4)
         #permute weight to batch,row,patch,hidden,embedding
@@ -416,21 +437,24 @@ class WeightModel(nn.Module):
         
         
         #concatenate output with list_weight
-        self.list_weight = torch.cat((self.list_weight,output),0)
+        self.list_weight.data = torch.cat((self.list_weight.data,output),0)
         # print(f"List weight shape:{self.list_weight.shape}")
-        list_concat = torch.cat((self.list_weight,output),0)
+        # list_concat = torch.cat((self.list_weight.data,output),0)
         # print(f"List concat shape:{list_concat.shape}")
         # output_permute = output_concat.permute(1,0,2,3)
-        output_permute = list_concat.permute(1,2,3,0)
+        # output_permute = self.list_weight.permute(1,2,3,0)
         
         #flatten concatenate output
-        output_flattern = output_permute.flatten(start_dim=2,end_dim=3)
-        x = nn.Parameter(output_flattern)
+        output_flatten = self.list_weight.flatten(start_dim=0,end_dim=1)
+        # print(f"Output flattern shape:{output_flatten.shape}")
+        output_flatten = output_flatten.transpose(0,2)
+        # print(f"Output flattern shape:{output_flatten.shape}")
+        x = nn.Parameter(output_flatten)
         # print(f"Output flatten shape:{output_flattern.shape}")
         
         #reshape output to batch,patch,hidden,embedding
-        linear = nn.Linear(in_features=output_flattern.shape[2],out_features=self.embedding_dim).to(device)
-        output_linear = linear(x)
+        linear = nn.Linear(in_features=output_flatten.shape[2],out_features=self.batch_size).to(device)
+        output_linear = linear(output_flatten).transpose(0,2)
         # print(f"Output linear shape:{output_linear.shape}")
         return output_linear
 
@@ -457,12 +481,10 @@ vit_optimizer = torch.optim.Adam(params=vit.parameters(),
                             lr=0.001,
                             betas=(0.9,0.999),
                             weight_decay=0.1)
+    
 
-weight_optimizer = torch.optim.Adam(params=weight_model.parameters(),
-                            lr=0.001,
-                            betas=(0.9,0.999),
-                            weight_decay=0.1)
- 
+# summary(vit,input_size=(32,3,244,244))
+# summary(weight_model)
 # Loss function
 loss_fn = nn.CrossEntropyLoss()
 
@@ -472,10 +494,10 @@ results = engine.train(model1=vit,
                       train_dataloader=train_dataloader,
                       test_dataloader=test_dataloader,
                       vit_optimizer=vit_optimizer,
-                      weight_optimizer=weight_optimizer,
                       loss_fn=loss_fn,
                       epochs=3,
-                      device=device)
+                      device=device,
+                      batch_size=batch_size)
 
 plot_loss_curves(results)
 
