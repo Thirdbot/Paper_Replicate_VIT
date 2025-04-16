@@ -452,60 +452,27 @@ vit = VIT(embedding_dim=embendding_dim,
 
 weight_model = WeightModel(embedding_dim=embendding_dim,batch_size=32)
 
-# Create a combined model that uses both ViT and WeightModel
-class CombinedModel(nn.Module):
-    def __init__(self, vit_model, weight_model):
-        super().__init__()
-        self.vit = vit_model
-        self.weight_model = weight_model
-        self.num_classes = self.vit.num_classes
-        self.classifier = nn.Sequential(
-            nn.LayerNorm(normalized_shape=self.vit.embedding_dim),
-            nn.Linear(in_features=self.vit.embedding_dim,out_features=self.num_classes)
-        )
-        
-    def forward(self, x):
-        # Get ViT output
-        vit_output, encoder_output = self.vit(x)
-        
-        # Get weights from weight model
-        weights = self.weight_model(encoder_output)
-        
-        # Ensure weights have the same batch size as encoder_output
-        if weights.shape[0] != encoder_output.shape[0]:
-            weights = weights[:encoder_output.shape[0]]
-            
-        # Apply weights to encoder output
-        print(f"Encoder output shape:{encoder_output.shape}")
-        
-        #batch matrix muktiplication using einsum
-        weighted_output = torch.einsum('b p e, e p b -> b p e', encoder_output, weights.transpose(0,2))
-        print(f"Weight shape:{weighted_output.shape}")
-        
-        # Extract class token
-        class_token = weighted_output[:, 0, :]  # [batch_size, embedding_dim]
-        
-        # Pass through classifier
-        x = self.classifier(class_token)  # [batch_size, num_classes]
-        return x
-
-# Create combined model
-combined_model = CombinedModel(vit, weight_model)
-
 # Create optimizer
-optimizer = torch.optim.Adam(params=combined_model.parameters(),
+vit_optimizer = torch.optim.Adam(params=vit.parameters(),
                             lr=0.001,
                             betas=(0.9,0.999),
                             weight_decay=0.1)
 
+weight_optimizer = torch.optim.Adam(params=weight_model.parameters(),
+                            lr=0.001,
+                            betas=(0.9,0.999),
+                            weight_decay=0.1)
+ 
 # Loss function
 loss_fn = nn.CrossEntropyLoss()
 
 # Train the combined model
-results = engine.train(model=combined_model,
+results = engine.train(model1=vit,
+                      model2=weight_model,
                       train_dataloader=train_dataloader,
                       test_dataloader=test_dataloader,
-                      optimizer=optimizer,
+                      vit_optimizer=vit_optimizer,
+                      weight_optimizer=weight_optimizer,
                       loss_fn=loss_fn,
                       epochs=3,
                       device=device)
