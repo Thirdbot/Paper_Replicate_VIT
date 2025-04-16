@@ -67,8 +67,8 @@ def train_step(model1: torch.nn.Module,
         # print(f"Encoder output shape:{encoder_output.shape}")
         
         #batch matrix muktiplication using einsum
-        # weighted_output = torch.einsum('b p e, e p b -> b p e', vit_encoder_output, weights.transpose(0,2))
-        weighted_output = weights
+        weighted_output = torch.einsum('b p e, e p b -> b p e', vit_encoder_output, weights.transpose(0,2))
+        # weighted_output = weights
         # print(f"Weight shape:{weighted_output.shape}")
         
        

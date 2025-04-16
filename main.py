@@ -388,7 +388,7 @@ class WeightModel(nn.Module):
     def __init__(self,embedding_dim:int=768,
                  batch_size:int=32,
                  weight_dim:int=226,
-                 hidden_dim:int=2):
+                 hidden_dim:int=256):
         super().__init__()
         self.embedding_dim = embedding_dim
         self.hidden_dim = hidden_dim
@@ -462,7 +462,7 @@ class WeightModel(nn.Module):
 
 # Create both models
 vit = VIT(embedding_dim=embendding_dim,
-          num_heads=12,
+          num_heads=1,
           mlp_size=3072,
           dropout=0.1,
           num_transformer_layers=12,
@@ -475,7 +475,7 @@ vit = VIT(embedding_dim=embendding_dim,
 # print(f"VIT encoder output:{vit_encoder_output}")
 # print(f"VIT encoder output shape:{vit_encoder_output.shape}")
 
-weight_model = WeightModel(embedding_dim=embendding_dim,batch_size=32)
+weight_model = WeightModel(embedding_dim=embendding_dim,batch_size=32,hidden_dim=32)
 
 # Create optimizer
 vit_optimizer = torch.optim.Adam(params=vit.parameters(),
@@ -496,7 +496,7 @@ results = engine.train(model1=vit,
                       test_dataloader=test_dataloader,
                       vit_optimizer=vit_optimizer,
                       loss_fn=loss_fn,
-                      epochs=3,
+                      epochs=100,
                       device=device,
                       batch_size=batch_size)
 
