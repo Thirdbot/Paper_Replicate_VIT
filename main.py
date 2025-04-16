@@ -426,12 +426,12 @@ class WeightModel(nn.Module):
         #flatten concatenate output
         output_flattern = output_permute.flatten(start_dim=2,end_dim=3)
         x = nn.Parameter(output_flattern)
-        print(f"Output flatten shape:{output_flattern.shape}")
+        # print(f"Output flatten shape:{output_flattern.shape}")
         
         #reshape output to batch,patch,hidden,embedding
         linear = nn.Linear(in_features=output_flattern.shape[2],out_features=self.embedding_dim).to(device)
         output_linear = linear(x)
-        print(f"Output linear shape:{output_linear.shape}")
+        # print(f"Output linear shape:{output_linear.shape}")
         return output_linear
 
 
@@ -476,7 +476,11 @@ class CombinedModel(nn.Module):
             weights = weights[:encoder_output.shape[0]]
             
         # Apply weights to encoder output
-        weighted_output = encoder_output * weights.squeeze()
+        print(f"Encoder output shape:{encoder_output.shape}")
+        
+        #batch matrix muktiplication using einsum
+        weighted_output = torch.einsum('b p e, e p b -> b p e', encoder_output, weights.transpose(0,2))
+        print(f"Weight shape:{weighted_output.shape}")
         
         # Extract class token
         class_token = weighted_output[:, 0, :]  # [batch_size, embedding_dim]
