@@ -1,5 +1,6 @@
 import os
 os.environ['KMP_DUPLICATE_LIB_OK']='TRUE'
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 import torch
 import torchvision
@@ -307,17 +308,16 @@ class TransformerEncoderBlock(nn.Module):
         
         self.multi_head_attention = MultiHeadAttention(embedding_dim=self.embedding_dim,
                                                       num_heads=self.num_heads)
-        self.mlp_block = MLPBlock(embedding_dim=self.embedding_dim,
-                                 mlp_size=self.mlp_size,
-                                 dropout=self.dropout)
+        
         # Move to device
         self.to(device)
         
     def forward(self,x):
         x = x.to(device)
         x = self.multi_head_attention(x) + x
-        x = self.mlp_block(x) + x
+       
         return x
+        
 
 # transformer_encoder_block = TransformerEncoderBlock(embedding_dim=embendding_dim)
 
@@ -333,13 +333,13 @@ class VIT(nn.Module):
     def __init__(self,
                  embedding_dim:int=768,
                  num_heads:int=12,
-                 mlp_size:int=3072,
+                 mlp_size:int=768,
                  dropout:float=0.1,
                  num_transformer_layers:int=12,
                  num_classes:int=1000,
                  img_size:int=244,
                  patch_size:int=16,
-                 hidden_dim:int=32
+                 hidden_dim:int=768
                  ):
         super().__init__()
         self.embedding_dim = embedding_dim
@@ -362,11 +362,15 @@ class VIT(nn.Module):
                                                              mlp_size=self.mlp_size,
                                                              dropout=self.dropout)
                                                      for _ in range(self.num_transformer_layers)])
+        self.mlp_layer = nn.Sequential(*[MLPBlock(embedding_dim=self.embedding_dim,
+                                 mlp_size=self.mlp_size,
+                                 dropout=self.dropout)
+                                     for _ in range(self.num_transformer_layers)])
         
         self.hidden_dim = hidden_dim
         #weight for randomize
         self.weight = nn.Parameter(torch.tensor([],device=device))
-        #store weight of attention mlp and randomize
+        #store weight of attention x  randomize
         self.list_weight = nn.Parameter(torch.tensor([],device=device))
         
         self.classifier = nn.Sequential(
@@ -408,23 +412,33 @@ class VIT(nn.Module):
         x = x.to(device)
         x = self.image_embedding(x)  # [batch_size, num_patches + 1, embedding_dim]
         encoder_output = self.transfromer_encoder_layers(x)  # [batch_size, num_patches + 1, embedding_dim]
+        #seperate ml from encoder
+        mlp_output = self.mlp_layer(encoder_output)
+        mlp_output = mlp_output + encoder_output
+        
         self.weight.data = torch.randn(1,encoder_output.shape[0],encoder_output.shape[1],self.hidden_dim,self.embedding_dim).to(device)
         
         W_output = self.transform_weight(encoder_output,self.weight.data)
         
         #concatenate output with list_weight
+        # print(f"W_output shape:{W_output.shape}")
         self.list_weight.data = torch.cat((self.list_weight.data,W_output),0)
         # print(f"List weight shape:{self.list_weight.shape}")
         
         #sum concat weight
         sum_weight = torch.sum(self.list_weight.data,dim=0)
-        
+        sum_weight = sum_weight.square()
+        self.list_weight.data = sum_weight.unsqueeze(0)
+        #encoder output * sum_weight
         weighted_output = torch.einsum('b p e, e p b -> b p e', encoder_output, sum_weight.transpose(0,2))
+        #mlp output(decoder) * weighted_output
+        mlped_output = torch.einsum('b p e, e p b -> b p e', mlp_output, weighted_output.transpose(0,2))
         # Extract only the class token (first token) for classification
-        class_token = weighted_output[:, 0, :]  # [batch_size, embedding_dim]
+        class_token = mlped_output[:, 0, :]  # [batch_size, embedding_dim]
         
         # Pass through classifier
         x = self.classifier(class_token)  # [batch_size, num_classes]
+        
     
         
         return x
@@ -434,10 +448,11 @@ class VIT(nn.Module):
 
 # Create both models
 vit = VIT(embedding_dim=embendding_dim,
-          num_heads=1,
-          mlp_size=3072,
-          dropout=0.1,
-          num_transformer_layers=1,
+          num_heads=3,
+          mlp_size=128,
+          hidden_dim=128,
+          dropout=0.2,
+          num_transformer_layers=6,
           num_classes=len(classes_name),
           img_size=IMG_SIZE,
           patch_size=16)
@@ -454,7 +469,7 @@ vit_optimizer = torch.optim.Adam(params=vit.parameters(),
                             weight_decay=0.1)
     
 
-# summary(vit,input_size=(32,3,244,244))
+summary(vit,input_size=(32,3,244,244))
 # summary(weight_model)
 # Loss function
 loss_fn = nn.CrossEntropyLoss()
@@ -465,7 +480,7 @@ results = engine.train(model1=vit,
                       test_dataloader=test_dataloader,
                       vit_optimizer=vit_optimizer,
                       loss_fn=loss_fn,
-                      epochs=5,
+                      epochs=10,
                       device=device,
                       batch_size=batch_size)
 
