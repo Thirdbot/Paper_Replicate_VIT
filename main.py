@@ -339,9 +339,11 @@ class VIT(nn.Module):
                  num_classes:int=1000,
                  img_size:int=244,
                  patch_size:int=16,
-                 hidden_dim:int=768
+                 hidden_dim:int=768,
+                 batch_size:int=32
                  ):
         super().__init__()
+        self.batch_size = batch_size
         self.embedding_dim = embedding_dim
         self.num_heads = num_heads
         self.mlp_size = mlp_size
@@ -369,7 +371,8 @@ class VIT(nn.Module):
         
         self.hidden_dim = hidden_dim
         #weight for randomize
-        self.weight = nn.Parameter(torch.tensor([],device=device))
+        self.weight = torch.randn(1,self.batch_size,self.num_patches+1,self.hidden_dim,self.embedding_dim).to(device)
+
         #store weight of attention x  randomize
         self.list_weight = nn.Parameter(torch.tensor([],device=device))
         
@@ -416,9 +419,8 @@ class VIT(nn.Module):
         mlp_output = self.mlp_layer(encoder_output)
         mlp_output = mlp_output + encoder_output
         
-        self.weight.data = torch.randn(1,encoder_output.shape[0],encoder_output.shape[1],self.hidden_dim,self.embedding_dim).to(device)
         
-        W_output = self.transform_weight(encoder_output,self.weight.data)
+        W_output = self.transform_weight(encoder_output,self.weight)
         
         #concatenate output with list_weight
         # print(f"W_output shape:{W_output.shape}")
@@ -427,7 +429,7 @@ class VIT(nn.Module):
         
         #sum concat weight
         sum_weight = torch.sum(self.list_weight.data,dim=0)
-        sum_weight = sum_weight.square()
+        # sum_weight = sum_weight.square()
         self.list_weight.data = sum_weight.unsqueeze(0)
         #encoder output * sum_weight
         weighted_output = torch.einsum('b p e, e p b -> b p e', encoder_output, sum_weight.transpose(0,2))
@@ -451,7 +453,7 @@ vit = VIT(embedding_dim=embendding_dim,
           num_heads=3,
           mlp_size=128,
           hidden_dim=128,
-          dropout=0.2,
+          dropout=0.1,
           num_transformer_layers=6,
           num_classes=len(classes_name),
           img_size=IMG_SIZE,
