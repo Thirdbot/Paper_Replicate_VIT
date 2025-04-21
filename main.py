@@ -338,7 +338,9 @@ class VIT(nn.Module):
                  num_transformer_layers:int=12,
                  num_classes:int=1000,
                  img_size:int=244,
-                 patch_size:int=16):
+                 patch_size:int=16,
+                 hidden_dim:int=32
+                 ):
         super().__init__()
         self.embedding_dim = embedding_dim
         self.num_heads = num_heads
@@ -348,6 +350,7 @@ class VIT(nn.Module):
         self.num_classes = num_classes
         self.img_size = img_size
         self.patch_size = patch_size
+        
         
         self.num_patches = (self.img_size // self.patch_size) ** 2
         
@@ -360,6 +363,12 @@ class VIT(nn.Module):
                                                              dropout=self.dropout)
                                                      for _ in range(self.num_transformer_layers)])
         
+        self.hidden_dim = hidden_dim
+        #weight for randomize
+        self.weight = nn.Parameter(torch.tensor([],device=device))
+        #store weight of attention mlp and randomize
+        self.list_weight = nn.Parameter(torch.tensor([],device=device))
+        
         self.classifier = nn.Sequential(
             nn.LayerNorm(normalized_shape=self.embedding_dim),
             nn.Linear(in_features=self.embedding_dim,out_features=self.num_classes)
@@ -367,59 +376,16 @@ class VIT(nn.Module):
         # Move to device
         self.to(device)
         
-    def forward(self,x):
-        x = x.to(device)
-        x = self.image_embedding(x)  # [batch_size, num_patches + 1, embedding_dim]
-        encoder_output = self.transfromer_encoder_layers(x)  # [batch_size, num_patches + 1, embedding_dim]
-        
-        # Extract only the class token (first token) for classification
-        class_token = encoder_output[:, 0, :]  # [batch_size, embedding_dim]
-        
-        # Pass through classifier
-        x = self.classifier(class_token)  # [batch_size, num_classes]
-    
-        
-        return x,encoder_output
-
-
-
-
-class WeightModel(nn.Module):
-    def __init__(self,embedding_dim:int=768,
-                 batch_size:int=32,
-                 weight_dim:int=226,
-                 hidden_dim:int=256):
-        super().__init__()
-        self.embedding_dim = embedding_dim
-        self.hidden_dim = hidden_dim
-        self.weight_dim = weight_dim
-        self.weight = nn.Parameter(torch.tensor([],device=device))
-
-        self.list_weight = nn.Parameter(torch.tensor([],device=device))
-        
-        self.batch_size = batch_size
-        self.to(device)
-
-    def forward(self,x):
-        x = x.to(device)        #row,batch,patch,hidden,embedding
-        # random_weight = nn.Parameter(torch.randn(1,self.batch_size,self.weight_dim,self.hidden_dim,self.embedding_dim).to(device))
-        self.weight.data = torch.randn(1,self.batch_size,self.weight_dim,self.hidden_dim,self.embedding_dim).to(device)
-       
-        # new_weight = torch.cat([self.weight.data, random_weight], 0)
-        # self.weight = nn.Parameter(new_weight)
-        # print(f"New weight shape:{self.weight.shape}")
-            
-        weight = self.weight.to(device)
-        #unsqueeze weight to batch,row,patch,hidden,1,embedding
-        # weight = weight.unsqueeze(4)
-        #permute weight to batch,row,patch,hidden,embedding
+    def transform_weight(self,encoder_output,weight):
         weight = weight.permute(1,0,2,3,4)
             
         # print(f"Weight shape:{weight.shape}")
         
         #pad with zero ensure batch size is the same
-        padding=torch.zeros((self.batch_size-x.shape[0],x.shape[1],self.embedding_dim))        
-        x = f.pad(x,pad=(0,0,0,0,0,padding.shape[0]))
+        # print(f"Encoder output shape:{encoder_output.shape}")
+        x = encoder_output
+        # padding=torch.zeros((encoder_output.shape[0],encoder_output.shape[1],self.embedding_dim))        
+        # x = f.pad(x,pad=(0,0,0,0,0,padding.shape[0]))
         
         # print(f"Padding shape:{x.shape}")
         
@@ -427,37 +393,43 @@ class WeightModel(nn.Module):
         expanded_x = x.unsqueeze(0)  # Add row dimension
         unsqueeze_x = expanded_x.unsqueeze(3)  # Add patch dimension
         # unsqueeze_x = unsqueeze_x.unsqueeze(4)  # Add embedding dimension
-        unsqueeze_x = unsqueeze_x.expand(1,batch_size,x.shape[1],self.hidden_dim,x.shape[2])# Add hidden dimensio
+        unsqueeze_x = unsqueeze_x.expand(1,encoder_output.shape[0],encoder_output.shape[1],self.hidden_dim,encoder_output.shape[2])# Add hidden dimensio
         # Permute to match weight dimensions
         permute_x = unsqueeze_x.permute(1,0,2,3,4)
         
         #perfrom collasp dim
+        # print(f"Permute x shape:{permute_x.shape}")
+        # print(f"Weight shape:{weight.shape}")
         output = torch.einsum('b a h s e, b a h s e -> a b h e', permute_x, weight)
-        # print(f"Modify x shape:{output.shape}")
         
+        return output
+    
+    def forward(self,x):
+        x = x.to(device)
+        x = self.image_embedding(x)  # [batch_size, num_patches + 1, embedding_dim]
+        encoder_output = self.transfromer_encoder_layers(x)  # [batch_size, num_patches + 1, embedding_dim]
+        self.weight.data = torch.randn(1,encoder_output.shape[0],encoder_output.shape[1],self.hidden_dim,self.embedding_dim).to(device)
+        
+        W_output = self.transform_weight(encoder_output,self.weight.data)
         
         #concatenate output with list_weight
-        self.list_weight.data = torch.cat((self.list_weight.data,output),0)
+        self.list_weight.data = torch.cat((self.list_weight.data,W_output),0)
         # print(f"List weight shape:{self.list_weight.shape}")
         
         #sum concat weight
         sum_weight = torch.sum(self.list_weight.data,dim=0)
         
-        #flatten concatenate output
-        # output_flatten = self.list_weight.flatten(start_dim=0,end_dim=1)
-        # print(f"Output flattern shape:{output_flatten.shape}")
-        # output_flatten = output_flatten.transpose(0,2)
-        # print(f"Output flattern shape:{output_flatten.shape}")
-        # x = nn.Parameter(output_flatten)
-        # print(f"Output flatten shape:{output_flattern.shape}")
+        weighted_output = torch.einsum('b p e, e p b -> b p e', encoder_output, sum_weight.transpose(0,2))
+        # Extract only the class token (first token) for classification
+        class_token = weighted_output[:, 0, :]  # [batch_size, embedding_dim]
         
-        #reshape output to batch,patch,hidden,embedding
-        # linear = nn.Linear(in_features=output_flatten.shape[2],out_features=self.batch_size).to(device)
-        # output_linear = linear(output_flatten).transpose(0,2)
-        # print(f"Output linear shape:{output_linear.shape}")
+        # Pass through classifier
+        x = self.classifier(class_token)  # [batch_size, num_classes]
+    
         
-        # print(f"Sum weight shape:{sum_weight.shape}")
-        return sum_weight
+        return x
+
+
 
 
 # Create both models
@@ -465,7 +437,7 @@ vit = VIT(embedding_dim=embendding_dim,
           num_heads=1,
           mlp_size=3072,
           dropout=0.1,
-          num_transformer_layers=12,
+          num_transformer_layers=1,
           num_classes=len(classes_name),
           img_size=IMG_SIZE,
           patch_size=16)
@@ -474,8 +446,6 @@ vit = VIT(embedding_dim=embendding_dim,
 # print(f"VIT shape:{vit_output.shape}")
 # print(f"VIT encoder output:{vit_encoder_output}")
 # print(f"VIT encoder output shape:{vit_encoder_output.shape}")
-
-weight_model = WeightModel(embedding_dim=embendding_dim,batch_size=32,hidden_dim=32)
 
 # Create optimizer
 vit_optimizer = torch.optim.Adam(params=vit.parameters(),
@@ -491,12 +461,11 @@ loss_fn = nn.CrossEntropyLoss()
 
 # Train the combined model
 results = engine.train(model1=vit,
-                      model2=weight_model,
                       train_dataloader=train_dataloader,
                       test_dataloader=test_dataloader,
                       vit_optimizer=vit_optimizer,
                       loss_fn=loss_fn,
-                      epochs=100,
+                      epochs=5,
                       device=device,
                       batch_size=batch_size)
 

@@ -134,24 +134,16 @@ def plot_loss_curves(results):
         results (dict): dictionary containing list of values, e.g.
             {"vit_train_loss": [...],
              "vit_train_acc": [...],
-             "weight_train_loss": [...],
-             "weight_train_acc": [...],
              "vit_test_loss": [...],
-             "vit_test_acc": [...],
-             "weight_test_loss": [...],
-             "weight_test_acc": [...]}
+             "vit_test_acc": [...]}
     """
     # Get the loss values
     vit_train_loss = results["vit_train_loss"]
-    weight_train_loss = results["weight_train_loss"]
     vit_test_loss = results["vit_test_loss"]
-    weight_test_loss = results["weight_test_loss"]
 
     # Get the accuracy values
     vit_train_acc = results["vit_train_acc"]
-    weight_train_acc = results["weight_train_acc"]
     vit_test_acc = results["vit_test_acc"]
-    weight_test_acc = results["weight_test_acc"]
 
     # Get the number of epochs
     epochs = range(len(vit_train_loss))
@@ -167,13 +159,6 @@ def plot_loss_curves(results):
     plt.xlabel("Epochs")
     plt.legend()
 
-    # Plot Weight Model loss
-    plt.subplot(2, 2, 2)
-    plt.plot(epochs, weight_train_loss, label="Weight Train Loss")
-    plt.plot(epochs, weight_test_loss, label="Weight Test Loss")
-    plt.title("Weight Model Loss")
-    plt.xlabel("Epochs")
-    plt.legend()
 
     # Plot ViT accuracy
     plt.subplot(2, 2, 3)
@@ -183,13 +168,6 @@ def plot_loss_curves(results):
     plt.xlabel("Epochs")
     plt.legend()
 
-    # Plot Weight Model accuracy
-    plt.subplot(2, 2, 4)
-    plt.plot(epochs, weight_train_acc, label="Weight Train Accuracy")
-    plt.plot(epochs, weight_test_acc, label="Weight Test Accuracy")
-    plt.title("Weight Model Accuracy")
-    plt.xlabel("Epochs")
-    plt.legend()
 
     # Adjust layout and show plot
     plt.tight_layout()
